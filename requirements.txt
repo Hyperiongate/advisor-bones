@@ -1,0 +1,31 @@
+# requirements.txt — Advisor Bones
+# Shiftwork Solutions LLC
+# Created:      2026-05-11
+# Last Updated: 2026-05-11
+#
+# Pin major versions for stability. Minor/patch updates are safe.
+# Run: pip install -r requirements.txt
+
+# Web framework
+flask>=3.0,<4.0
+flask-cors>=4.0,<5.0
+gunicorn>=21.0,<22.0
+
+# Anthropic SDK (Claude orchestrator + web_search tool use)
+anthropic>=0.40.0,<1.0
+
+# ElevenLabs TTS/STT (via direct HTTP — no SDK needed)
+requests>=2.31,<3.0
+
+# PDF transcript generation
+reportlab>=4.0,<5.0
+
+# PostgreSQL + pgvector
+psycopg2-binary>=2.9,<3.0
+
+# OpenAI SDK (embeddings only — text-embedding-3-small)
+openai>=1.30,<2.0
+
+# Document ingestion (optional — only needed when running ingest.py)
+# pdfminer.six>=20221105   # Uncomment to support PDF ingestion
+# python-docx>=1.1         # Uncomment to support DOCX ingestion
