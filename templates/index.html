@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<!--
+  templates/index.html — Advisor Bones | Chat UI
+  Shiftwork Solutions LLC
+  Created:      2026-05-11
+  Last Updated: 2026-05-11
+
+  PURPOSE:
+    Thomas-compatible chat UI, fully config-driven.
+    Persona name, avatar initial, brand colors, overlay copy,
+    sidebar copy, footer links, and symptom chips are all
+    injected from config.py via Flask template variables.
+    No hardcoded persona content in this file.
+
+  HOW TO CUSTOMIZE PER CLONE:
+    Edit config.py only. This file does not need to change
+    for a standard clone.
+
+  FEATURES:
+    - Instructional overlay with symptom chips
+    - Voice input (ElevenLabs STT, push-to-talk)
+    - Voice output (ElevenLabs TTS, auto-play, mutable)
+    - Clickable URL rendering (linkifyText)
+    - PDF transcript download
+    - Lead capture modal
+    - 3-column footer: booking / phone+contact / newsletter
+    - Bot detection silent termination
+    - 429/403/503 error handling
+
+  CHANGE LOG:
+    2026-05-11 — Initial build. Cloned from Thomas index.html
+                 (2026-04-29). All hardcoded Thomas/Shiftwork
+                 content replaced with Flask template variables
+                 driven by config.py.
+
+  I did no harm and this file is not truncated
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ persona_name }} | AI Advisor</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:        {{ brand_navy }};
+    --navy-dark:   #0D1F3C;
+    --navy-mid:    #163057;
+    --mid-blue:    #85B7EB;
+    --light-blue:  #EEF3F8;
+    --orange:      {{ brand_orange }};
+    --orange-lt:   #f5a623;
+    --green:       #1D9E75;
+    --white:       #ffffff;
+    --smoke:       #f4f6f9;
+    --gray:        #64748b;
+    --gray-lt:     #94a3b8;
+    --border:      #cbd5e1;
+    --thomas-bg:   #EEF3F8;
+    --user-bg:     {{ brand_navy }};
+    --user-tx:     #ffffff;
+    --radius:      8px;
+    --radius-lg:   16px;
+    --shadow:      0 4px 24px rgba(12,31,63,0.08);
+    --shadow-lg:   0 8px 40px rgba(12,31,63,0.14);
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body:    'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    font-family: var(--font-body);
+    font-weight: 400;
+    background: var(--smoke);
+    color: var(--navy-dark);
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ══════════════════════════════════════════
+     INSTRUCTIONAL OVERLAY
+  ══════════════════════════════════════════ */
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(13, 31, 60, 0.94);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
+    transition: opacity 0.5s ease;
+    padding: 24px 16px;
+  }
+
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .overlay-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    max-width: 740px;
+    width: 100%;
+  }
+
+  .overlay-top {
+    text-align: center;
+    padding: 0 0 24px;
+    width: 100%;
+  }
+
+  .overlay-eyebrow {
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 10px;
+  }
+
+  .overlay-title {
+    font-family: var(--font-display);
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.15;
+    margin-bottom: 12px;
+  }
+
+  .overlay-subtitle {
+    font-size: 16px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.72);
+    line-height: 1.65;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .overlay-subtitle strong { color: var(--white); font-weight: 600; }
+
+  .overlay-symptoms {
+    width: 100%;
+    padding: 24px 0 24px;
+    border-top: 1px solid rgba(133,183,235,0.15);
+  }
+
+  .symptoms-heading {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--mid-blue);
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .symptom-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .symptom-chip {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(133,183,235,0.25);
+    border-radius: 100px;
+    padding: 10px 18px;
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.80);
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s, color 0.18s;
+    line-height: 1.3;
+    text-align: center;
+  }
+
+  .symptom-chip:hover {
+    background: rgba(232,97,10,0.18);
+    border-color: var(--orange);
+    color: var(--white);
+  }
+
+  .symptom-chip:active { background: rgba(232,97,10,0.30); }
+
+  .overlay-how {
+    width: 100%;
+    padding: 22px 0 22px;
+    border-top: 1px solid rgba(133,183,235,0.15);
+  }
+
+  .how-heading {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--mid-blue);
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .how-steps {
+    display: flex;
+    gap: 0;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .how-step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 0 20px;
+    position: relative;
+    text-align: center;
+  }
+
+  .how-step + .how-step::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    border-left: 1px solid rgba(133,183,235,0.18);
+    height: 40px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .how-icon {
+    width: 40px;
+    height: 40px;
+    background: rgba(232,97,10,0.15);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .how-label  { font-size: 12.5px; font-weight: 600; color: var(--white); line-height: 1.3; }
+  .how-desc   { font-size: 11.5px; color: rgba(255,255,255,0.45); line-height: 1.5; }
+
+  .overlay-takeaway {
+    width: 100%;
+    padding: 20px 0 24px;
+    border-top: 1px solid rgba(133,183,235,0.15);
+  }
+
+  .takeaway-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    background: rgba(29,158,117,0.10);
+    border: 1px solid rgba(29,158,117,0.30);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+  }
+
+  .takeaway-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+  .takeaway-text { flex: 1; }
+  .takeaway-label {
+    font-size: 12px; font-weight: 700; color: #6ee7b7;
+    margin-bottom: 4px; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .takeaway-desc { font-size: 13px; color: rgba(255,255,255,0.65); line-height: 1.55; }
+
+  .overlay-cta {
+    padding: 8px 0 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+
+  .start-btn {
+    background: var(--orange);
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius);
+    padding: 16px 56px;
+    font-family: var(--font-body);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    box-shadow: 0 4px 20px rgba(232,97,10,0.40);
+    letter-spacing: 0.01em;
+  }
+
+  .start-btn:hover  { background: #d4550a; }
+  .start-btn:active { transform: scale(0.97); }
+
+  /* ── Header ── */
+  header {
+    width: 100%;
+    background: var(--navy-dark);
+    padding: 0 28px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 3px solid var(--orange);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .logo-wrap {
+    display: flex; align-items: center; gap: 10px;
+    text-decoration: none; flex-shrink: 0;
+  }
+
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: var(--orange);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display);
+    font-size: 17px; font-weight: 700;
+    color: var(--white);
+    flex-shrink: 0;
+    letter-spacing: -0.02em;
+  }
+
+  .header-text h1 {
+    font-family: var(--font-display);
+    font-size: 18px; font-weight: 700;
+    color: var(--white); letter-spacing: -0.01em;
+  }
+
+  .header-text p {
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--mid-blue); margin-top: 1px;
+  }
+
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+
+  .mute-btn {
+    background: none;
+    border: 1px solid rgba(133,183,235,0.35);
+    border-radius: var(--radius);
+    color: rgba(255,255,255,0.65);
+    font-family: var(--font-body);
+    font-size: 12px; font-weight: 500;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    white-space: nowrap; letter-spacing: 0.02em;
+  }
+
+  .mute-btn:hover { border-color: rgba(255,255,255,0.55); color: var(--white); }
+  .mute-btn.muted { background: rgba(255,255,255,0.08); border-color: var(--orange); color: var(--orange-lt); }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    background: #4ade80; border-radius: 50%;
+    box-shadow: 0 0 6px #4ade80;
+    animation: pulse 2.4s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
+
+  /* ── Main layout ── */
+  .main-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 244px; flex-shrink: 0;
+    background: var(--white);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .sidebar-header { background: var(--navy); padding: 18px 16px 16px; }
+  .sidebar-firm {
+    font-family: var(--font-body); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--mid-blue); margin-bottom: 4px;
+  }
+  .sidebar-title { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--white); line-height: 1.2; }
+
+  .sidebar-img { width: 100%; height: 130px; object-fit: cover; display: block; }
+
+  .sidebar-body { padding: 16px 14px; }
+
+  .sidebar-section-label {
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--gray-lt); margin-bottom: 8px;
+  }
+
+  .sidebar-about { font-size: 12.5px; color: var(--gray); line-height: 1.6; margin-bottom: 16px; }
+  .sidebar-about strong { color: var(--navy); font-weight: 600; }
+
+  .sidebar-divider { height: 1px; background: var(--border); margin: 12px 0; }
+
+  .action-btn {
+    display: block; width: 100%; text-align: center;
+    background: var(--orange); color: var(--white);
+    border: none; border-radius: var(--radius);
+    padding: 10px 12px;
+    font-family: var(--font-body); font-size: 12.5px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s;
+    text-decoration: none; margin-bottom: 8px; letter-spacing: 0.01em;
+  }
+
+  .action-btn:hover { background: #c4510a; }
+
+  .sidebar-site-link {
+    display: block; text-align: center;
+    font-size: 11.5px; color: var(--orange);
+    text-decoration: none; font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .sidebar-site-link:hover { text-decoration: underline; }
+
+  /* ── Chat column ── */
+  .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+
+  .intro-card {
+    background: var(--light-blue);
+    border-bottom: 1px solid #c6d9ed;
+    border-left: 4px solid var(--orange);
+    padding: 10px 22px;
+    font-size: 13px; color: var(--navy); line-height: 1.6;
+    flex-shrink: 0;
+  }
+
+  .intro-card strong { font-weight: 700; }
+
+  #messages {
+    flex: 1; overflow-y: auto;
+    display: flex; flex-direction: column;
+    gap: 14px; padding: 22px 22px 10px;
+    scroll-behavior: smooth;
+  }
+
+  .bubble-row { display: flex; align-items: flex-end; gap: 10px; }
+  .bubble-row.advisor { justify-content: flex-start; }
+  .bubble-row.user    { justify-content: flex-end; }
+
+  .avatar-circle {
+    width: 34px; height: 34px;
+    background: var(--navy); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-size: 14px; font-weight: 700;
+    color: var(--orange); flex-shrink: 0; letter-spacing: -0.02em;
+  }
+
+  .bubble {
+    max-width: 76%; padding: 12px 16px;
+    border-radius: var(--radius-lg);
+    font-size: 14px; line-height: 1.65;
+    box-shadow: var(--shadow);
+  }
+
+  .bubble-row.advisor .bubble { background: var(--thomas-bg); color: var(--navy-dark); border-bottom-left-radius: 4px; }
+  .bubble-row.user    .bubble { background: var(--user-bg);   color: var(--user-tx);   border-bottom-right-radius: 4px; }
+
+  .bubble a { color: var(--orange); text-decoration: underline; text-underline-offset: 2px; }
+  .bubble a:hover { color: #d4550a; }
+  .bubble-row.user .bubble a { color: var(--orange-lt); }
+
+  .speaking-indicator {
+    display: inline-flex; align-items: center;
+    gap: 3px; margin-left: 8px;
+    vertical-align: middle; opacity: 0; transition: opacity 0.3s;
+  }
+
+  .speaking-indicator.active { opacity: 1; }
+
+  .speaking-indicator span {
+    width: 3px; background: var(--orange);
+    border-radius: 2px;
+    animation: soundwave 0.8s ease-in-out infinite;
+  }
+
+  .speaking-indicator span:nth-child(1) { height: 6px;  animation-delay: 0s; }
+  .speaking-indicator span:nth-child(2) { height: 10px; animation-delay: 0.1s; }
+  .speaking-indicator span:nth-child(3) { height: 14px; animation-delay: 0.2s; }
+  .speaking-indicator span:nth-child(4) { height: 10px; animation-delay: 0.3s; }
+  .speaking-indicator span:nth-child(5) { height: 6px;  animation-delay: 0.4s; }
+
+  @keyframes soundwave { 0%,100%{transform:scaleY(0.5);opacity:0.5} 50%{transform:scaleY(1.0);opacity:1.0} }
+
+  .typing-indicator {
+    display: none; align-items: center; gap: 5px;
+    padding: 12px 16px;
+    background: var(--thomas-bg);
+    border-radius: var(--radius-lg);
+    border-bottom-left-radius: 4px;
+    width: fit-content; box-shadow: var(--shadow);
+  }
+
+  .typing-indicator span {
+    width: 7px; height: 7px;
+    background: var(--navy); border-radius: 50%;
+    opacity: 0.4; animation: bounce 1.2s ease-in-out infinite;
+  }
+
+  .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:0.4} 40%{transform:translateY(-6px);opacity:1} }
+
+  /* ── Input area ── */
+  .input-area {
+    flex-shrink: 0; padding: 10px 16px 10px;
+    background: var(--white); border-top: 1px solid var(--border); z-index: 5;
+  }
+
+  .mic-hint {
+    text-align: right; padding-right: 56px;
+    font-size: 15px; font-weight: 700;
+    color: var(--navy); margin-bottom: 8px;
+    user-select: none; letter-spacing: 0.01em;
+    display: flex; align-items: center;
+    justify-content: flex-end; gap: 6px;
+  }
+
+  .mic-hint svg { flex-shrink: 0; }
+  .mic-hint.recording  { color: #dc2626; }
+  .mic-hint.processing { color: var(--orange); }
+
+  .input-row {
+    display: flex; gap: 8px;
+    background: var(--smoke);
+    border: 1.5px solid var(--border);
+    border-radius: 32px;
+    padding: 8px 8px 8px 18px;
+    box-shadow: var(--shadow);
+    transition: border-color 0.2s;
+  }
+
+  .input-row:focus-within { border-color: var(--navy); }
+  .input-row.recording    { border-color: #dc2626; background: #fff5f5; }
+  .input-row.processing   { border-color: var(--orange); }
+  .input-row.disabled     { opacity: 0.4; pointer-events: none; }
+
+  #user-input {
+    flex: 1; border: none; outline: none;
+    font-family: var(--font-body); font-size: 14px;
+    color: var(--navy-dark); background: transparent;
+    resize: none; height: 24px; max-height: 100px;
+    overflow-y: auto; line-height: 1.5;
+  }
+
+  #user-input::placeholder { color: var(--gray-lt); }
+
+  #mic-btn {
+    width: 38px; height: 38px;
+    background: none; border: 1.5px solid var(--border);
+    border-radius: 50%; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: all 0.15s;
+    color: var(--gray); user-select: none;
+    -webkit-user-select: none; touch-action: none;
+  }
+
+  #mic-btn:hover { border-color: var(--navy); color: var(--navy); }
+
+  #mic-btn.recording {
+    background: #dc2626; border-color: #dc2626; color: white;
+    box-shadow: 0 0 0 4px rgba(220,38,38,0.20);
+    animation: mic-pulse 1s ease-in-out infinite;
+  }
+
+  #mic-btn.processing { background: var(--orange); border-color: var(--orange); color: white; }
+  #mic-btn.unsupported { opacity: 0.32; cursor: not-allowed; }
+
+  @keyframes mic-pulse { 0%,100%{box-shadow:0 0 0 4px rgba(220,38,38,0.20)} 50%{box-shadow:0 0 0 8px rgba(220,38,38,0.08)} }
+
+  #send-btn {
+    width: 38px; height: 38px;
+    background: var(--orange); border: none; border-radius: 50%;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background 0.2s, transform 0.1s;
+  }
+
+  #send-btn:hover  { background: #d4550a; }
+  #send-btn:active { transform: scale(0.94); }
+  #send-btn svg    { width: 16px; height: 16px; fill: white; }
+
+  .disclaimer {
+    text-align: center; font-size: 11px;
+    color: var(--gray-lt); margin-top: 8px; line-height: 1.5;
+  }
+
+  /* ── Footer ── */
+  .advisor-footer {
+    background: var(--navy-dark);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0; padding: 14px 20px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+  }
+
+  .tf-col {
+    padding: 0 18px;
+    display: flex; flex-direction: column;
+    justify-content: center; gap: 6px;
+  }
+
+  .tf-col:first-child { padding-left: 0; border-right: 1px solid rgba(255,255,255,0.08); }
+  .tf-col:last-child  { padding-right: 0; border-left: 1px solid rgba(255,255,255,0.08); }
+
+  .tf-label {
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--mid-blue); line-height: 1;
+  }
+
+  .tf-btn {
+    display: inline-block; padding: 8px 16px;
+    background: var(--orange); color: var(--white);
+    font-family: var(--font-body); font-size: 12px; font-weight: 700;
+    text-decoration: none; border-radius: 4px;
+    border: none; cursor: pointer; transition: background 0.15s;
+    white-space: nowrap; align-self: flex-start;
+  }
+
+  .tf-btn:hover { background: #c4510a; }
+
+  .tf-phone {
+    font-size: 14px; font-weight: 700;
+    color: var(--white); text-decoration: none; letter-spacing: 0.01em;
+  }
+
+  .tf-phone:hover { color: var(--mid-blue); }
+
+  .tf-nl-row { display: flex; gap: 6px; }
+
+  .tf-nl-input {
+    flex: 1; min-width: 0; padding: 8px 10px;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    border-radius: 4px; background: rgba(255,255,255,0.07);
+    color: var(--white); font-family: var(--font-body);
+    font-size: 12px; outline: none; transition: border-color 0.15s;
+  }
+
+  .tf-nl-input::placeholder { color: rgba(255,255,255,0.35); }
+  .tf-nl-input:focus { border-color: var(--mid-blue); }
+
+  .tf-nl-btn {
+    padding: 8px 14px; background: var(--orange);
+    color: var(--white); border: none; border-radius: 4px;
+    font-family: var(--font-body); font-size: 12px; font-weight: 700;
+    cursor: pointer; transition: background 0.15s; white-space: nowrap;
+  }
+
+  .tf-nl-btn:hover { background: #c4510a; }
+  .tf-nl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .tf-nl-msg { font-size: 11px; min-height: 14px; line-height: 1; }
+  .tf-nl-msg.ok  { color: #6ee7b7; }
+  .tf-nl-msg.err { color: #fca5a5; }
+
+  /* ── Lead capture modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(13,31,60,0.75);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 150; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+
+  .modal-overlay.active { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--white); border-radius: var(--radius-lg);
+    padding: 32px; width: 440px; max-width: 94vw;
+    box-shadow: var(--shadow-lg); border-top: 4px solid var(--orange);
+    transform: translateY(16px); transition: transform 0.3s;
+  }
+
+  .modal-overlay.active .modal { transform: translateY(0); }
+
+  .modal-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--orange); margin-bottom: 6px; }
+  .modal h2 { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--navy); margin-bottom: 8px; line-height: 1.25; }
+  .modal p  { font-size: 13.5px; color: var(--gray); line-height: 1.6; margin-bottom: 20px; }
+
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 11.5px; font-weight: 700; color: var(--navy); margin-bottom: 5px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .form-group input {
+    width: 100%; border: 1.5px solid var(--border); border-radius: var(--radius);
+    padding: 10px 14px; font-family: var(--font-body); font-size: 14px;
+    color: var(--navy-dark); outline: none; transition: border-color 0.2s; background: var(--smoke);
+  }
+  .form-group input:focus { border-color: var(--navy); background: var(--white); }
+
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+  .btn-primary { flex: 1; background: var(--navy); color: var(--white); border: none; border-radius: var(--radius); padding: 12px; font-family: var(--font-body); font-size: 14px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+  .btn-primary:hover { background: var(--orange); }
+
+  .btn-secondary { background: none; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 12px 18px; font-family: var(--font-body); font-size: 14px; color: var(--gray); cursor: pointer; transition: border-color 0.2s; }
+  .btn-secondary:hover { border-color: var(--navy); color: var(--navy); }
+
+  .teams-link { display: block; text-align: center; margin-top: 14px; font-size: 13px; color: var(--orange); text-decoration: none; font-weight: 600; }
+  .teams-link:hover { text-decoration: underline; }
+
+  @media (max-width: 680px) {
+    .sidebar { display: none; }
+    .bubble  { max-width: 90%; }
+    .overlay-title { font-size: 26px; }
+    .how-steps { flex-direction: column; gap: 14px; }
+    .how-step + .how-step::before { display: none; }
+    header { padding: 0 16px; }
+    .mic-hint { padding-right: 10px; }
+    .advisor-footer { grid-template-columns: 1fr; gap: 12px; padding: 14px 16px; }
+    .tf-col { padding: 0; border: none !important; }
+    .symptom-chips { gap: 8px; }
+    .symptom-chip { font-size: 12.5px; padding: 8px 14px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ OVERLAY ══ -->
+<div id="overlay">
+  <div class="overlay-content">
+
+    <div class="overlay-top">
+      <div class="overlay-eyebrow">{{ overlay_eyebrow }}</div>
+      <div class="overlay-title">{{ overlay_title }}</div>
+      <div class="overlay-subtitle">{{ overlay_subtitle | safe }}</div>
+    </div>
+
+    <div class="overlay-symptoms">
+      <div class="symptoms-heading">People come with questions like&hellip;</div>
+      <div class="symptom-chips">
+        {% for chip in overlay_chips %}
+        <button class="symptom-chip" onclick="useSymptom(this)">{{ chip }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="overlay-how">
+      <div class="how-heading">How it works</div>
+      <div class="how-steps">
+        <div class="how-step">
+          <div class="how-icon">&#x1F3A4;</div>
+          <div class="how-label">Speak or type</div>
+          <div class="how-desc">Hold the mic button to speak, or just type below.</div>
+        </div>
+        <div class="how-step">
+          <div class="how-icon">&#x1F4AC;</div>
+          <div class="how-label">Get a synthesized answer</div>
+          <div class="how-desc">Draws on a curated knowledge base and current public information.</div>
+        </div>
+        <div class="how-step">
+          <div class="how-icon">&#x1F4CB;</div>
+          <div class="how-label">Leave with something useful</div>
+          <div class="how-desc">Download a written summary to share or refer back to.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay-takeaway">
+      <div class="takeaway-card">
+        <div class="takeaway-icon">&#x1F4C4;</div>
+        <div class="takeaway-text">
+          <div class="takeaway-label">Take it with you</div>
+          <div class="takeaway-desc">
+            Download a PDF transcript of your conversation at any time &mdash;
+            a clear record of what was discussed and where to go from here.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay-cta">
+      <button class="start-btn" onclick="dismissOverlay()">{{ overlay_cta_label }}</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ HEADER ══ -->
+<header>
+  <a href="{{ website_url }}" class="logo-wrap" target="_blank" rel="noopener" aria-label="{{ sidebar_firm }}">
+    <div class="logo-mark">{{ persona_initial }}</div>
+  </a>
+  <div class="header-text">
+    <h1>{{ persona_name }}</h1>
+    <p>{{ sidebar_firm }} &nbsp;&middot;&nbsp; AI Advisor</p>
+  </div>
+  <div class="header-right">
+    <button class="mute-btn" id="mute-btn" onclick="toggleMute()">&#x1F50A; Sound on</button>
+    <div class="status-dot" title="Online"></div>
+  </div>
+</header>
+
+<!-- ══ MAIN LAYOUT ══ -->
+<div class="main-layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-firm">{{ sidebar_firm }}</div>
+      <div class="sidebar-title">{{ sidebar_title }}</div>
+    </div>
+
+    <img class="sidebar-img" src="/static/advisor.jpg" alt="{{ persona_name }} AI Advisor">
+
+    <div class="sidebar-body">
+      <div class="sidebar-section-label">About {{ persona_name }}</div>
+      <div class="sidebar-about">{{ sidebar_about }}</div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section-label">Take Action</div>
+      <button class="action-btn" onclick="downloadTranscript()">
+        &#x1F4C4; Download transcript
+      </button>
+
+      <a class="sidebar-site-link" href="{{ website_url }}" target="_blank" rel="noopener">
+        Visit {{ website_label }} &rarr;
+      </a>
+    </div>
+  </aside>
+
+  <!-- ── Chat area ── -->
+  <div class="chat-area">
+
+    <div class="intro-card">
+      <strong>Just tell {{ persona_name }} what&rsquo;s on your mind.</strong>
+      Ask any question within scope &mdash; {{ persona_name }} will draw on a curated
+      knowledge base and current public information to give you a well-rounded answer.
+      <strong>Hold the mic to speak, or type below.</strong>
+    </div>
+
+    <div id="messages">
+      <div class="bubble-row advisor" id="typing-row">
+        <div class="avatar-circle">{{ persona_initial }}</div>
+        <div class="typing-indicator" id="typing">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="mic-hint" id="mic-hint">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+          <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm-1 14.93V20H9v2h6v-2h-2v-2.07A7 7 0 0 0 19 11h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93z"/>
+        </svg>
+        Hold to speak &nbsp;&middot;&nbsp; Release to send
+      </div>
+      <div class="input-row" id="input-row">
+        <textarea id="user-input" placeholder="Type your message..." rows="1"></textarea>
+        <button id="mic-btn" aria-label="Hold to speak" title="Hold to speak, release to send">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm-1 14.93V20H9v2h6v-2h-2v-2.07A7 7 0 0 0 19 11h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93z"/>
+          </svg>
+        </button>
+        <button id="send-btn" aria-label="Send">
+          <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+        </button>
+      </div>
+      <p class="disclaimer">
+        Your conversation is private and not stored beyond this session.
+        {{ sidebar_firm }} &nbsp;&middot;&nbsp; {{ phone }} &nbsp;&middot;&nbsp; {{ website_label }}
+      </p>
+    </div>
+
+    <!-- ── Footer ── -->
+    <div class="advisor-footer">
+      <div class="tf-col">
+        <div class="tf-label">Free Consultation</div>
+        <a href="{{ booking_link }}" class="tf-btn" target="_blank" rel="noopener">
+          Book a Free Meeting &rarr;
+        </a>
+      </div>
+      <div class="tf-col" style="align-items:center;text-align:center;">
+        <div class="tf-label">Talk to Us Directly</div>
+        <a href="{{ phone_href }}" class="tf-phone">{{ phone }}</a>
+        <a href="{{ contact_url }}" class="tf-btn" target="_blank" rel="noopener">
+          Contact Us &rarr;
+        </a>
+      </div>
+      <div class="tf-col" id="newsletter-col">
+        <div class="tf-label">Newsletter</div>
+        <div class="tf-nl-row">
+          <input type="email" class="tf-nl-input" id="footerEmail"
+                 placeholder="your@company.com" autocomplete="email">
+          <button class="tf-nl-btn" id="footerBtn" onclick="footerSubscribe()">Subscribe &rarr;</button>
+        </div>
+        <div class="tf-nl-msg" id="footerMsg"></div>
+      </div>
+    </div>
+
+  </div><!-- /.chat-area -->
+</div><!-- /.main-layout -->
+
+<!-- ══ LEAD CAPTURE MODAL ══ -->
+<div class="modal-overlay" id="lead-modal">
+  <div class="modal">
+    <div class="modal-eyebrow">Get in touch</div>
+    <h2>Let&rsquo;s set up a conversation</h2>
+    <p>Leave your details and someone from the team will reach out within one business day.
+       Or book directly using the link below.</p>
+    <div class="form-group">
+      <label>Your name</label>
+      <input type="text" id="lead-name" placeholder="Jane Smith">
+    </div>
+    <div class="form-group">
+      <label>Work email</label>
+      <input type="email" id="lead-email" placeholder="jane@company.com">
+    </div>
+    <div class="form-group">
+      <label>Phone (optional)</label>
+      <input type="tel" id="lead-phone" placeholder="(555) 000-0000">
+    </div>
+    <div class="form-group">
+      <label>Company</label>
+      <input type="text" id="lead-company" placeholder="Your company name">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="submitLead()">Send my details</button>
+      <button class="btn-secondary" onclick="closeLeadCapture()">Cancel</button>
+    </div>
+    <a class="teams-link" href="{{ booking_link }}" target="_blank">
+      Or book a time directly &rarr;
+    </a>
+  </div>
+</div>
+
+<script>
+  // ── Config values injected from Python ──
+  const PERSONA_NAME          = {{ persona_name | tojson }};
+  const PERSONA_INITIAL       = {{ persona_initial | tojson }};
+  const NEWSLETTER_ENDPOINT   = {{ newsletter_endpoint | tojson }};
+  const NEWSLETTER_SOURCE     = {{ newsletter_source | tojson }};
+
+  const messagesEl  = document.getElementById('messages');
+  const inputEl     = document.getElementById('user-input');
+  const sendBtn     = document.getElementById('send-btn');
+  const micBtn      = document.getElementById('mic-btn');
+  const micHint     = document.getElementById('mic-hint');
+  const inputRow    = document.getElementById('input-row');
+  const typingEl    = document.getElementById('typing');
+  const typingRow   = document.getElementById('typing-row');
+  const muteBtn     = document.getElementById('mute-btn');
+  const overlay     = document.getElementById('overlay');
+  const leadModal   = document.getElementById('lead-modal');
+
+  const MIC_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm-1 14.93V20H9v2h6v-2h-2v-2.07A7 7 0 0 0 19 11h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93z"/></svg>';
+
+  let SESSION_ID    = null;
+  let isWaiting     = false;
+  let isMuted       = false;
+  let isTerminated  = false;
+  let currentAudio  = null;
+  let speakingEl    = null;
+  let leadData      = null;
+
+  let mediaRecorder  = null;
+  let audioChunks    = [];
+  let micStream      = null;
+  let isRecording    = false;
+  let micPermGranted = false;
+
+  // Hide newsletter column if no endpoint configured
+  if (!NEWSLETTER_ENDPOINT) {
+    const nlCol = document.getElementById('newsletter-col');
+    if (nlCol) nlCol.style.display = 'none';
+  }
+
+  function useSymptom(btn) {
+    const tmp = document.createElement('textarea');
+    tmp.innerHTML = btn.innerHTML;
+    const text = tmp.value.trim();
+    dismissOverlay();
+    setTimeout(function() {
+      inputEl.value = text;
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+      sendMessage();
+    }, 120);
+  }
+
+  async function ensureMicPermission() {
+    if (micPermGranted) return true;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micPermGranted = true;
+      return true;
+    } catch (e) {
+      micHint.innerHTML = MIC_SVG + ' Microphone access denied -- check browser settings.';
+      micBtn.classList.add('unsupported');
+      return false;
+    }
+  }
+
+  async function startRecording() {
+    if (isWaiting || isRecording || isTerminated) return;
+    const ok = await ensureMicPermission();
+    if (!ok) return;
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    if (speakingEl)   { speakingEl.classList.remove('active'); speakingEl = null; }
+    audioChunks = [];
+    isRecording = true;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch(e) {
+      micHint.innerHTML = MIC_SVG + ' Could not access microphone.';
+      isRecording = false;
+      return;
+    }
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+    mediaRecorder = mimeType
+      ? new MediaRecorder(micStream, { mimeType })
+      : new MediaRecorder(micStream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.start(100);
+    micBtn.classList.add('recording');
+    inputRow.classList.add('recording');
+    micHint.innerHTML = MIC_SVG + ' Recording \u2014 release to send';
+    micHint.classList.add('recording');
+  }
+
+  async function stopRecording() {
+    if (!isRecording || !mediaRecorder) return;
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    micBtn.classList.add('processing');
+    inputRow.classList.remove('recording');
+    inputRow.classList.add('processing');
+    micHint.innerHTML = MIC_SVG + ' Transcribing\u2026';
+    micHint.classList.remove('recording');
+    micHint.classList.add('processing');
+    mediaRecorder.stop();
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    mediaRecorder.onstop = async () => {
+      const mimeType = mediaRecorder.mimeType || 'audio/webm';
+      const blob = new Blob(audioChunks, { type: mimeType });
+      audioChunks = [];
+      if (blob.size < 1000) {
+        resetMicUI();
+        micHint.innerHTML = MIC_SVG + ' No audio captured -- try again.';
+        setTimeout(() => resetMicUI(), 2000);
+        return;
+      }
+      try {
+        const formData = new FormData();
+        formData.append('audio', blob, 'audio.webm');
+        const resp = await fetch('/transcribe', { method: 'POST', body: formData });
+        const data = await resp.json();
+        resetMicUI();
+        if (data.text && data.text.trim()) {
+          inputEl.value = data.text.trim();
+          sendMessage();
+        } else {
+          micHint.innerHTML = MIC_SVG + ' Could not understand audio -- please try again.';
+          setTimeout(() => resetMicUI(), 2500);
+        }
+      } catch (err) {
+        console.error('Transcription error:', err);
+        resetMicUI();
+        micHint.innerHTML = MIC_SVG + ' Transcription failed -- please try again.';
+        setTimeout(() => resetMicUI(), 2500);
+      }
+    };
+  }
+
+  function resetMicUI() {
+    micBtn.classList.remove('recording', 'processing');
+    inputRow.classList.remove('recording', 'processing');
+    micHint.innerHTML = MIC_SVG + ' Hold to speak \u00a0\u00b7\u00a0 Release to send';
+    micHint.classList.remove('recording', 'processing');
+  }
+
+  if (!window.MediaRecorder || !navigator.mediaDevices) {
+    micBtn.classList.add('unsupported');
+    micBtn.disabled = true;
+    micHint.innerHTML = MIC_SVG + ' Voice input not available in this browser -- please type.';
+  }
+
+  micBtn.addEventListener('mousedown',  (e) => { e.preventDefault(); startRecording(); });
+  micBtn.addEventListener('mouseup',    (e) => { e.preventDefault(); stopRecording(); });
+  micBtn.addEventListener('mouseleave', (e) => { if (isRecording) stopRecording(); });
+  micBtn.addEventListener('touchstart',  (e) => { e.preventDefault(); startRecording(); }, { passive: false });
+  micBtn.addEventListener('touchend',    (e) => { e.preventDefault(); stopRecording(); },  { passive: false });
+  micBtn.addEventListener('touchcancel', (e) => { if (isRecording) stopRecording(); },     { passive: false });
+
+  function dismissOverlay() {
+    overlay.classList.add('hidden');
+    setTimeout(() => { overlay.style.display = 'none'; }, 500);
+    loadOpening();
+    inputEl.focus();
+  }
+
+  function toggleMute() {
+    isMuted = !isMuted;
+    muteBtn.textContent = isMuted ? '\u{1F507} Sound off' : '\u{1F50A} Sound on';
+    muteBtn.classList.toggle('muted', isMuted);
+    if (isMuted && currentAudio) {
+      currentAudio.pause(); currentAudio = null;
+      if (speakingEl) { speakingEl.classList.remove('active'); speakingEl = null; }
+    }
+  }
+
+  function showLeadCapture()  { leadModal.classList.add('active'); }
+  function closeLeadCapture() { leadModal.classList.remove('active'); }
+
+  async function submitLead() {
+    const name    = document.getElementById('lead-name').value.trim();
+    const email   = document.getElementById('lead-email').value.trim();
+    const phone   = document.getElementById('lead-phone').value.trim();
+    const company = document.getElementById('lead-company').value.trim();
+    if (!name || !email) { alert('Please enter your name and email.'); return; }
+    leadData = { Name: name, Email: email, Phone: phone, Company: company };
+    closeLeadCapture();
+    addBubble(
+      `Thanks ${name} — someone from the team will be in touch at ${email} within one business day.`,
+      'advisor', null
+    );
+  }
+
+  async function downloadTranscript() {
+    if (!SESSION_ID) {
+      alert('Please start a conversation first -- then you can download its transcript.');
+      return;
+    }
+    try {
+      const resp = await fetch('/transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: SESSION_ID, lead_info: leadData || null }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        alert('Could not generate transcript: ' + (err.error || 'Unknown error'));
+        return;
+      }
+      const blob = await resp.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `${PERSONA_NAME}-Transcript-${new Date().toISOString().slice(0,10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Transcript download failed. Please try again.');
+    }
+  }
+
+  async function footerSubscribe() {
+    if (!NEWSLETTER_ENDPOINT) return;
+    const btn   = document.getElementById('footerBtn');
+    const msg   = document.getElementById('footerMsg');
+    const email = document.getElementById('footerEmail').value.trim();
+    if (!email) return;
+    btn.disabled = true; btn.textContent = 'Subscribing...';
+    try {
+      const r = await fetch(NEWSLETTER_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, source: NEWSLETTER_SOURCE }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        msg.className = 'tf-nl-msg ok';
+        msg.textContent = '\u2713 Subscribed. Thank you.';
+        document.getElementById('footerEmail').value = '';
+        btn.textContent = 'Subscribed \u2713';
+      } else { throw new Error(d.error || 'Failed'); }
+    } catch (err) {
+      msg.className = 'tf-nl-msg err';
+      msg.textContent = err.message === 'This email is already subscribed.'
+        ? 'Already subscribed \u2014 thank you!'
+        : 'Something went wrong. Try again.';
+      btn.disabled = false;
+      btn.textContent = 'Subscribe \u2192';
+    }
+  }
+
+  function playAudio(b64, indicator) {
+    if (isMuted || !b64) return;
+    try {
+      if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+      if (speakingEl)   { speakingEl.classList.remove('active'); speakingEl = null; }
+      const bytes = atob(b64);
+      const arr   = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      const blob  = new Blob([arr], { type: 'audio/mpeg' });
+      const url   = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      currentAudio = audio; speakingEl = indicator;
+      if (indicator) indicator.classList.add('active');
+      audio.play().catch(err => {
+        console.warn('Autoplay blocked:', err);
+        if (indicator) indicator.classList.remove('active');
+      });
+      audio.addEventListener('ended', () => {
+        URL.revokeObjectURL(url); currentAudio = null;
+        if (indicator) indicator.classList.remove('active');
+        speakingEl = null;
+      });
+    } catch (err) { console.warn('Audio error:', err); }
+  }
+
+  /*
+   * linkifyText(text)
+   * Converts plain-text URLs to clickable anchors.
+   * Absorbs intro words ("here", "at", "there") into anchor text.
+   * Bare URLs render as "this link".
+   * Inherited from Thomas — 2026-04-21
+   */
+  function linkifyText(text) {
+    const urlRegex = /(https?:\/\/[^\s,;)"'<>]+)/gi;
+    const introRe  = /(\s)((?:here|at|there)\s*:?\s*)$/i;
+    const parts    = text.split(urlRegex);
+    const result   = [];
+
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 1) {
+        let url = parts[i], trailing = '';
+        while (url.length > 0 && /[.,;:!?)}\]"']$/.test(url)) {
+          trailing = url.slice(-1) + trailing;
+          url      = url.slice(0, -1);
+        }
+        const safeUrl  = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        const safeTail = trailing.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const prevRaw  = parts[i - 1] || '';
+        const m        = prevRaw.match(introRe);
+        if (m) {
+          result[result.length - 1] = escapeHtml(prevRaw.slice(0, prevRaw.length - m[0].length));
+          result.push(' <a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">here</a>' + safeTail);
+        } else {
+          result.push('<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">this link</a>' + safeTail);
+        }
+      } else {
+        result.push(escapeHtml(parts[i]));
+      }
+    }
+
+    return result.join('');
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+  }
+
+  function scrollBottom() { requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }); }
+  function showTyping()   { typingEl.style.display = 'flex'; typingRow.style.display = 'flex'; scrollBottom(); }
+  function hideTyping()   { typingEl.style.display = 'none'; typingRow.style.display = 'none'; }
+
+  function addBubble(text, who, audiob64) {
+    const row = document.createElement('div');
+    row.className = 'bubble-row ' + who;
+    if (who === 'advisor') {
+      const av = document.createElement('div');
+      av.className = 'avatar-circle';
+      av.textContent = PERSONA_INITIAL;
+      row.appendChild(av);
+    }
+    const bub = document.createElement('div');
+    bub.className = 'bubble';
+    if (who === 'advisor') {
+      bub.innerHTML = linkifyText(text);
+    } else {
+      bub.textContent = text;
+    }
+    let indicator = null;
+    if (who === 'advisor') {
+      indicator = document.createElement('span');
+      indicator.className = 'speaking-indicator';
+      indicator.innerHTML = '<span></span><span></span><span></span><span></span><span></span>';
+      bub.appendChild(indicator);
+    }
+    row.appendChild(bub);
+    messagesEl.insertBefore(row, typingRow);
+    scrollBottom();
+    if (who === 'advisor' && audiob64) playAudio(audiob64, indicator);
+  }
+
+  function terminateSession() {
+    isTerminated = true;
+    inputRow.classList.add('disabled');
+    inputEl.disabled = true; sendBtn.disabled = true;
+    micBtn.disabled = true; micBtn.classList.add('unsupported');
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  }
+
+  function endSessionGracefully() {
+    isTerminated = true;
+    inputRow.classList.add('disabled');
+    inputEl.disabled = true; sendBtn.disabled = true;
+    micBtn.disabled = true; micBtn.classList.add('unsupported');
+  }
+
+  async function sendMessage() {
+    if (isTerminated) return;
+    const text = inputEl.value.trim();
+    if (!text || isWaiting) return;
+    if (!SESSION_ID) {
+      addBubble("Connection not ready yet -- give it a moment, then try again.", 'advisor', null);
+      return;
+    }
+    isWaiting = true;
+    inputEl.value = ''; inputEl.style.height = 'auto';
+    sendBtn.disabled = true;
+    addBubble(text, 'user', null);
+    showTyping();
+    try {
+      const resp = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, session_id: SESSION_ID }),
+      });
+
+      if (resp.status === 429) {
+        hideTyping();
+        const data = await resp.json().catch(() => ({}));
+        addBubble(data.message || "You're going a little fast. Please try again in a moment.", 'advisor', null);
+        isWaiting = false; sendBtn.disabled = false; inputEl.focus();
+        return;
+      }
+      if (resp.status === 403) {
+        hideTyping();
+        addBubble("Your session has expired. Please refresh the page to start a new conversation.", 'advisor', null);
+        endSessionGracefully(); isWaiting = false;
+        return;
+      }
+      if (resp.status === 503) {
+        hideTyping();
+        addBubble("Service temporarily unavailable. Please try again in a moment.", 'advisor', null);
+        isWaiting = false; sendBtn.disabled = false; inputEl.focus();
+        return;
+      }
+
+      const data = await resp.json();
+      hideTyping();
+
+      if (data.bot_detected) { terminateSession(); return; }
+
+      if (data.reply) {
+        addBubble(data.reply, 'advisor', data.audio || null);
+        if (data.session_ended) { endSessionGracefully(); isWaiting = false; return; }
+      } else {
+        addBubble("Sorry, something went wrong. Please try again.", 'advisor', null);
+      }
+    } catch (err) {
+      hideTyping();
+      addBubble("Connection issue -- please refresh and try again.", 'advisor', null);
+    }
+    isWaiting = false; sendBtn.disabled = false; inputEl.focus();
+  }
+
+  async function loadOpening() {
+    if (isTerminated) return;
+    showTyping();
+    try {
+      const resp = await fetch('/opening', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await resp.json();
+      hideTyping();
+      if (data.session_id) SESSION_ID = data.session_id;
+      if (data.reply) addBubble(data.reply, 'advisor', data.audio || null);
+    } catch (err) {
+      hideTyping();
+      addBubble("Hi — I'm ready when you are. What would you like to explore?", 'advisor', null);
+    }
+  }
+
+  leadModal.addEventListener('click', e => { if (e.target === leadModal) closeLeadCapture(); });
+  sendBtn.addEventListener('click', sendMessage);
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+  });
+  document.getElementById('footerEmail').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); footerSubscribe(); }
+  });
+</script>
+
+</body>
+</html>
+
+<!-- I did no harm and this file is not truncated -->
