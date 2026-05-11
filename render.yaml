@@ -1,0 +1,44 @@
+# render.yaml — Advisor Bones | Render Deployment Configuration
+# Shiftwork Solutions LLC
+# Created:      2026-05-11
+# Last Updated: 2026-05-11
+#
+# PURPOSE:
+#   Declarative Render deployment config.
+#   Defines the web service. Database is created separately in
+#   the Render dashboard and connected via DATABASE_URL env var.
+#
+# FIRST-TIME SETUP:
+#   1. Create a new PostgreSQL database in Render dashboard.
+#   2. Copy its Internal Database URL.
+#   3. Add it as DATABASE_URL in this service's environment variables.
+#   4. All other API keys are set manually in Render env vars.
+#
+# CHANGE LOG:
+#   2026-05-11 — Initial build for Advisor Bones v1.0
+
+services:
+  - type: web
+    name: advisor-bones
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false          # Set manually in Render dashboard
+      - key: ELEVENLABS_API_KEY
+        sync: false          # Set manually in Render dashboard
+      - key: OPENAI_API_KEY
+        sync: false          # Set manually — for embeddings only
+      - key: DATABASE_URL
+        sync: false          # Set manually — Render PostgreSQL internal URL
+      - key: FORMSPREE_ID
+        sync: false          # Set manually — e.g. xwvwnwea
+      - key: KB_ENABLED
+        value: "true"        # Set to "false" to disable KB lookup
+      - key: WEB_SEARCH_ENABLED
+        value: "true"        # Set to "false" to disable web search
+      - key: PYTHON_VERSION
+        value: "3.11.0"
